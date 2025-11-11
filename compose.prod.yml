@@ -2,7 +2,12 @@ services:
   app:
     build: .
     environment:
-      # Redis host can be overridden by Dokploy environment variables
+      # Primary: Use REDIS_URL (supports passwords, custom ports, etc.)
+      # Example: redis://user:password@hostname:6379
+      # Dokploy: Set this in environment variables to your Redis service URL
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      
+      # Fallback: Individual host/port (if REDIS_URL not set)
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
     depends_on:

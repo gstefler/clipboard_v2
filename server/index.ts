@@ -5,15 +5,13 @@ import Redis from "ioredis";
 testDockerBuild();
 
 // Redis connection configuration
-const redisHost = process.env.REDIS_HOST || "redis";
-const redisPort = parseInt(process.env.REDIS_PORT || "6379");
+// Supports both REDIS_URL (full connection string) and individual host/port
+const redisUrl = process.env.REDIS_URL || `redis://${process.env.REDIS_HOST || "redis"}:${process.env.REDIS_PORT || "6379"}`;
 
-console.log(`Attempting to connect to Redis at ${redisHost}:${redisPort}`);
+console.log(`Attempting to connect to Redis using URL: ${redisUrl}`);
 
 // Redis connection with error handling
-const redis = new Redis({
-    host: redisHost,
-    port: redisPort,
+const redis = new Redis(redisUrl, {
     retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);
         console.log(`Redis connection attempt ${times}, retrying in ${delay}ms...`);
