@@ -4,10 +4,50 @@ import Redis from "ioredis";
 
 testDockerBuild();
 
-// Redis connection
+// Redis connection configuration
+const redisHost = process.env.REDIS_HOST || "redis";
+const redisPort = parseInt(process.env.REDIS_PORT || "6379");
+
+console.log(`Attempting to connect to Redis at ${redisHost}:${redisPort}`);
+
+// Redis connection with error handling
 const redis = new Redis({
-    host: process.env.REDIS_HOST || "redis",
-    port: parseInt(process.env.REDIS_PORT || "6379"),
+    host: redisHost,
+    port: redisPort,
+    retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        console.log(`Redis connection attempt ${times}, retrying in ${delay}ms...`);
+        return delay;
+    },
+    maxRetriesPerRequest: 3,
+    enableReadyCheck: true,
+    lazyConnect: false,
+    connectTimeout: 10000, // 10 seconds timeout
+    reconnectOnError: (err) => {
+        console.log('Redis reconnectOnError triggered:', err.message);
+        return true;
+    },
+});
+
+// Handle Redis connection events
+redis.on('connect', () => {
+    console.log('Redis connected successfully');
+});
+
+redis.on('ready', () => {
+    console.log('Redis is ready to accept commands');
+});
+
+redis.on('error', (err) => {
+    console.error('Redis connection error:', err.message);
+});
+
+redis.on('close', () => {
+    console.log('Redis connection closed');
+});
+
+redis.on('reconnecting', () => {
+    console.log('Redis reconnecting...');
 });
 
 // WebSocket data type
@@ -29,9 +69,15 @@ const server = serve<WebSocketData>({
 
         // API endpoint to create a new room
         if (path === "/api/room" && req.method === "POST") {
-            const roomId = generateRoomId();
-            await redis.set(`room:${roomId}:content`, "");
-            return Response.json({ roomId });
+            try {
+                const roomId = generateRoomId();
+                await redis.set(`room:${roomId}:content`, "");
+                console.log(`Created room: ${roomId}`);
+                return Response.json({ roomId });
+            } catch (error) {
+                console.error('Failed to create room:', error);
+                return Response.json({ error: 'Failed to create room' }, { status: 500 });
+            }
         }
 
         // WebSocket endpoint for room synchronization
@@ -90,6 +136,12 @@ const server = serve<WebSocketData>({
                     type: "init",
                     content: content || "",
                 }));
+            }).catch((error) => {
+                console.error(`Failed to get content for room ${roomId}:`, error.message);
+                ws.send(JSON.stringify({
+                    type: "init",
+                    content: "",
+                }));
             });
         },
         message(ws, message) {
@@ -98,7 +150,9 @@ const server = serve<WebSocketData>({
 
             if (data.type === "update") {
                 // Store content in Redis
-                redis.set(`room:${roomId}:content`, data.content);
+                redis.set(`room:${roomId}:content`, data.content).catch((error) => {
+                    console.error(`Failed to store content for room ${roomId}:`, error.message);
+                });
 
                 // Broadcast to all clients in the room except sender
                 const roomConnections = rooms.get(roomId);
