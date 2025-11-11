@@ -2,13 +2,13 @@ services:
   app:
     build: .
     ports:
-      - "5555:5555"
+      - '5555:5555'
     depends_on:
       - redis
   redis:
-    image: "redis:alpine"
+    image: 'redis:alpine'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ 'CMD', 'redis-cli', 'ping' ]
       interval: 10s
       timeout: 5s
       retries: 5
